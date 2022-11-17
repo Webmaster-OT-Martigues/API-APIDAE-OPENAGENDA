@@ -1,7 +1,18 @@
 <?php 				
 			
-	include "config/config.php";
-	include "fonctions/fonctions_API.php";
+	if (!file_exists("config/config.php")) {	
+		header ('Location: 404.php');	exit();	
+	} 
+	else { 	
+		include "config/config.php";
+	}
+	
+	if (!file_exists("fonctions/fonctions_API.php")) 	{	
+		header ('Location: 404.php');	exit();	
+	} 
+	else { 	
+		include "fonctions/fonctions_API.php";
+	}
 			
 	$Openagenda_event_adresse = array(
 		'name' 			=> 	"TEST - Office de Tourisme de Martigues", /* Si vous voulez utiliser l'api a des fin de test, écrivez 'test' dans vos titres et placez une valeur booléenne vrai sous une clé 'test' dans vos requêtes. */
