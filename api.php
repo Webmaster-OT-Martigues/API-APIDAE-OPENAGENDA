@@ -459,7 +459,7 @@ Note dans la lecture des commentaires :
 											}
 										}
 
-										$horaireHTML .= "<center>".$begin." - ".$end."</center><br>";										
+										$horaireHTML .= "<center>".$begin." - ".$end."</center><br>";	/* Dans l'affichage, cela risque de ne pas rentrer dans une seule ligne */
 									
 									} 
 									while (++$nb_date_ouverture && isset($json_event_date_ouverture->periodesOuvertures[$nb_date_ouverture]->dateDebut));																																			
