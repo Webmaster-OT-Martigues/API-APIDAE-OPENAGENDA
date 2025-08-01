@@ -367,18 +367,104 @@ Note dans la lecture des commentaires :
 				$result_uid_location=$result_loc->location->uid;
 				write_to_console('uid de la création de la location > '.$result_loc->location->uid);
 
+/* GESTION DES DATES */		
+
+/*
+*---------------------------------------------------------------
+* ERREUR DETECTÉE ! Il y a un correctif à apporter à la gestion des dates :
+* - Il existe un problème dans les dates été / hivers avec un décalage d'une heure. 
+* - 
+*---------------------------------------------------------------
+*/
+			
+/* ********************************************************************************************************************************** */
 /* GESTION DES DATES */			
-			$nb_date_ouverture=0;
-				do 
-				{
-					/* Recherche des horaires - Ouvertures et fermetures ainsi que la date en cours  */
-					$begin			=$json_event_date_ouverture->periodesOuvertures[$nb_date_ouverture]->dateDebut."T".$json_event_date_ouverture->periodesOuvertures[$nb_date_ouverture]->horaireOuverture;
-					$end			=$json_event_date_ouverture->periodesOuvertures[$nb_date_ouverture]->dateFin  ."T".$json_event_date_ouverture->periodesOuvertures[$nb_date_ouverture]->horaireFermeture;
-					$date_ouverture	=$json_event_date_ouverture->periodesOuvertures[$nb_date_ouverture]->dateDebut;
-					$event_heure_ouverture[] = array('begin' => $begin, 'end' => $end);
-					
-				} 
-				while ($json_event_date_ouverture->periodesOuvertures[++$nb_date_ouverture]->dateDebut!="");
+/* ********************************************************************************************************************************** */
+	/* Alors, oui, j'aurai pu faire plus propre ! */ 
+	if (estEnHeureEte()) {
+		$heure_ete="OUI"; //echo "Nous sommes en heure d'été.";
+	} else {
+		$heure_ete="NON"; 
+	}	
+			
+
+									$joursSemaine = [
+										"LUNDI" => 1,
+										"MARDI" => 2,
+										"MERCREDI" => 3,
+										"JEUDI" => 4,
+										"VENDREDI" => 5,
+										"SAMEDI" => 6,
+										"DIMANCHE" => 7
+									];
+										$nb_date_ouverture=0;
+										$horaireHTML = ''; 
+									do 
+									{ 
+
+										$periode = $json_event_date_ouverture->periodesOuvertures[$nb_date_ouverture];
+										if (!isset($periode->dateDebut)) break;
+									
+										$dateDebut = new DateTime($periode->dateDebut);
+										$dateFin   = new DateTime($periode->dateFin);
+									
+										$joursAutorises = [];
+									
+										
+										foreach ($periode->ouverturesJournalieres as $jour) {
+											$joursAutorises[] = $joursSemaine[$jour->jour];
+										}
+									
+									
+										$horaires = [];    // Récupération des horaires de la période
+										foreach ($periode->horaires as $horaire) {
+											foreach ($horaire->timePeriods as $timePeriod) 	
+											{
+												foreach ($timePeriod->timeFrames as $frame)	
+												{
+													$horaires[] = [
+														'startTime' => $frame->startTime,
+														'endTime'   => $frame->endTime
+													];
+												}
+											}
+										}
+										
+										$interval = new DateInterval('P1D');  // Parcours des dates
+										$periodeDates = new DatePeriod($dateDebut, $interval, $dateFin->modify('+1 day'));
+									
+
+										foreach ($periodeDates as $date) 
+										{
+											$jourNum = (int)$date->format('N');
+											if (in_array($jourNum, $joursAutorises))
+											{
+												foreach ($horaires as $horaire) 
+												{
+													$jourStr = $date->format('Y-m-d');
+
+													$begin = $jourStr . 'T' . $horaire['startTime'] . ':00+0200';
+													$end   = $jourStr . 'T' . $horaire['endTime'] 	. ':00+0200';
+													
+													if ($heure_ete=="OUI") { // GESTION OFFSET ÉTÉ / HIVER
+														$begin	=str_replace("+0200",	"+0100", $begin);
+														$end	=str_replace("+0200",  	"+0100", $end);
+													}
+
+													$event_heure_ouverture[] = [
+														'begin' => $begin,
+														'end'   => $end
+													];
+												}
+											}
+										}
+
+										$horaireHTML .= "<center>".$begin." - ".$end."</center><br>";										
+									
+									} 
+									while (++$nb_date_ouverture && isset($json_event_date_ouverture->periodesOuvertures[$nb_date_ouverture]->dateDebut));																																			
+		
+																		
 
 /* GESTION DU HANDICAP  */		
 
@@ -523,5 +609,110 @@ Note dans la lecture des commentaires :
 		}  // de foreach ($lesdates as $retourfiche) 
 
 	} // de	foreach($retobjetsTouristiques as $fiche=>$lesdates)
+
+
+
+ 
+	function raccourcirTexte($texte, $limite) {
+		
+		// On vérifie si le texte est déjà plus court que la limite ! Et donc on ne coupe rien ! 
+		if (strlen($texte) <= $limite) {
+			return $texte;
+		}
+
+		// Ici, on divise le texte en phrases en se basant sur les points suivis d'un espace. 
+		// L'espace est très important et il faut le garder.
+		$phrases = explode('. ', $texte);
+
+		$texteRaccourci = '';
+		
+		foreach ($phrases as $phrase) {
+			
+			// Cette boucle foreach ajoute chaque phrase si et seulement si la longueur totale reste le nombre $limite.
+			
+			if (strlen($texteRaccourci . $phrase . '. ') <= $limite) {
+				$texteRaccourci .= $phrase . '. ';
+			} else {
+				break; // On arrête si on dépasse la limite
+			}
+		}
+
+		// Supprimer l'espace et le point final inutiles
+		
+		return trim($texteRaccourci);
+	
+	}
+
+/* Petite mise à jour à faire 
+* Il existe une API qui corrige et indique les fautes de fr */ 
+*/
+    function mettreEnValeurFaute($phrase, $offset, $longueurMot) {
+        // Découpe la phrase
+        $debut = substr($phrase, 0, $offset);
+        $motFautif = substr($phrase, $offset, $longueurMot);
+        $fin = substr($phrase, $offset + $longueurMot);
+
+        // Retourne la phrase avec le mot fautif en gras
+        return htmlspecialchars($debut) . "<strong><span class=\"erreur\">" . htmlspecialchars($motFautif) . "</span></strong>" . htmlspecialchars($fin);
+    }
+
+	function ete_ou_hiver($date_str) {
+		$date = new DateTime($date_str, new DateTimeZone('Europe/Paris'));
+		return $date->format('I') === '1';
+	}
+
+
+function estEnHeureEte($timezone = 'Europe/Paris') {
+    $date = new DateTime('now', new DateTimeZone($timezone));
+    return $date->format('I') == '1'; // 'I' retourne 1 si DST (heure d'été) est active, 0 sinon
+}
+
+
+	function changerOffsetManuellement($date_str, $ancien_offset, $nouveau_offset) {
+		// Remplace l'ancien offset par le nouveau dans la chaîne
+		return str_replace($ancien_offset, $nouveau_offset, $date_str);
+	}
+
+	function corrigerTexte_aff_erreur($texte) {
+		
+		$url = "https://api.languagetool.org/v2/check";
+		$data = ['text' => $texte, 'language' => 'fr'];
+
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_URL, $url);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt($ch, CURLOPT_POST, 1);
+		curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+		curl_setopt($ch, CURLOPT_HTTPHEADER, ["Content-Type: application/x-www-form-urlencoded"]);
+
+		$response = curl_exec($ch);
+		curl_close($ch);
+
+		$data = json_decode($response, true);
+		if (!isset($data['matches']) || empty($data['matches'])) {
+			return ["texteCorrige" => $texte, "fautes" => []];
+		}
+
+		$fautes = [];
+		foreach ($data['matches'] as $faute) {
+			$offset = $faute['offset'];
+			$length = $faute['length'];
+
+			// Correction ici : utilisation de mb_substr pour extraire le mot fautif correctement
+			$motFautif = mb_substr($texte, $offset, $length, "UTF-8");
+
+			$suggestions = array_map(fn($r) => $r['value'], $faute['replacements']);
+			$fautes[] = [
+				"motFautif" => $motFautif,
+				"message" => $faute['message'],
+				"context" => $faute['context'],
+				"suggestions" => $suggestions
+			];
+		}
+
+		return ["texteCorrige" => $texte, "fautes" => $fautes];
+	}
+
+
 
 ?>
